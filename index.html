@@ -47,6 +47,14 @@
             background-color: #f0fdf4;
             border-color: #22c55e;
         }
+
+        #output-table th[data-column-index] {
+            cursor: pointer;
+            user-select: none;
+        }
+        #output-table .column-selected {
+            background-color: #dcfce7;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans p-4 md:p-8 min-h-screen">
@@ -155,12 +163,12 @@
                         <table class="w-full text-sm text-left text-gray-600" id="output-table">
                             <thead class="text-xs text-gray-700 uppercase bg-gray-100">
                                 <tr>
-                                    <th class="px-4 py-3 border-b">Seq.</th>
-                                    <th class="px-4 py-3 border-b">Item</th>
-                                    <th class="px-4 py-3 border-b text-right">Mult. <i class="ph ph-pencil-simple text-amber-600" title="Editável"></i></th>
-                                    <th class="px-4 py-3 border-b text-right">Valor Final</th>
-                                    <th class="px-4 py-3 border-b text-center">Código <i class="ph ph-pencil-simple text-blue-600" title="Editável"></i></th>
-                                    <th class="px-4 py-3 border-b text-right font-bold text-gray-900">Total Calc.</th>
+                                    <th data-column-index="0" class="px-4 py-3 border-b" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Seq.</th>
+                                    <th data-column-index="1" class="px-4 py-3 border-b" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Item</th>
+                                    <th data-column-index="2" class="px-4 py-3 border-b text-right" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Mult. <i class="ph ph-pencil-simple text-amber-600" title="Editável"></i></th>
+                                    <th data-column-index="3" class="px-4 py-3 border-b text-right" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Valor Final</th>
+                                    <th data-column-index="4" class="px-4 py-3 border-b text-center" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Código <i class="ph ph-pencil-simple text-blue-600" title="Editável"></i></th>
+                                    <th data-column-index="5" class="px-4 py-3 border-b text-right font-bold text-gray-900" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Total Calc.</th>
                                 </tr>
                             </thead>
                             <tbody id="output-tbody" class="divide-y divide-gray-200 bg-white">
@@ -193,6 +201,7 @@
         let itemColumnIndex = -1;
         let priceColumnIndex = -1;
         let processedTableData = []; // Para copiar pro clipboard
+        let selectedColumns = [];
 
         // Gera a data atual no formato M+DD+YYYY (ex: Set 23 2026 -> 9232026)
         function generateDateCode() {
@@ -205,7 +214,46 @@
 
         window.onload = function() {
             setupImagePaste();
+            setupTableSelection();
         };
+
+        function setupTableSelection() {
+            const table = document.getElementById('output-table');
+
+            table.querySelector('thead').addEventListener('click', function(event) {
+                const header = event.target.closest('th[data-column-index]');
+                if (!header) return;
+
+                const columnIndex = Number(header.dataset.columnIndex);
+                if (event.ctrlKey || event.metaKey) {
+                    selectedColumns = selectedColumns.includes(columnIndex)
+                        ? selectedColumns.filter(index => index !== columnIndex)
+                        : [...selectedColumns, columnIndex];
+                } else {
+                    selectedColumns = [columnIndex];
+                }
+
+                updateColumnSelection();
+            });
+
+            document.addEventListener('keydown', function(event) {
+                if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c' && selectedColumns.length) {
+                    const activeElement = document.activeElement;
+                    if (activeElement && (activeElement.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(activeElement.tagName))) return;
+
+                    event.preventDefault();
+                    copyToClipboard();
+                }
+            });
+        }
+
+        function updateColumnSelection() {
+            document.querySelectorAll('#output-table tr').forEach(row => {
+                Array.from(row.children).forEach((cell, index) => {
+                    cell.classList.toggle('column-selected', selectedColumns.includes(index));
+                });
+            });
+        }
 
         // --- SISTEMA DE NOTIFICAÇÃO ---
         function showMessage(text, type = 'success') {
@@ -427,6 +475,7 @@
             
             const tbody = document.getElementById('output-tbody');
             tbody.innerHTML = ''; // Limpa tabela
+            selectedColumns = [];
             
             processedTableData = []; // Reseta dados do clipboard
             let totalSum = 0;
@@ -532,6 +581,9 @@
                 return;
             }
 
+            const columnsToCopy = selectedColumns.length
+                ? [...selectedColumns].sort((first, second) => first - second)
+                : [0, 1, 2, 3, 4, 5];
             let textToCopy = "";
             const totalSum = document.getElementById('output-total').innerText;
 
@@ -539,11 +591,13 @@
             processedTableData.forEach(row => {
                 // Transforma ponto em virgula na hora de jogar pro excel se necessário? 
                 // O usuário pediu ponto no requisito: "Sempre Ponto".
-                textToCopy += row.join('\t') + '\n';
+                textToCopy += columnsToCopy.map(index => row[index]).join('\t') + '\n';
             });
 
-            // Adiciona Rodapé igual o exemplo: espaços tabulados até a ultima coluna e o total
-            textToCopy += `\t\t\t\t\t${totalSum}`;
+            // Inclui o rodapé somente quando a coluna Total Calc. estiver selecionada.
+            if (columnsToCopy.includes(5)) {
+                textToCopy += `${columnsToCopy.map(index => index === 5 ? totalSum : '').join('\t')}`;
+            }
 
             // Usa a API Clipboard nativa (Moderno)
             try {
@@ -554,7 +608,7 @@
                 textArea.select();
                 document.execCommand("copy");
                 document.body.removeChild(textArea);
-                showMessage("Copiado! Agora dê CTRL+V no Excel.");
+                showMessage(selectedColumns.length ? "Colunas selecionadas copiadas!" : "Copiado! Agora dê CTRL+V no Excel.");
             } catch (err) {
                 console.error('Falha ao copiar:', err);
                 showMessage("Erro ao copiar. Tente selecionar a tabela manualmente.", "error");
