@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversor de Tabela MSS</title>
+    <!-- Tailwind CSS para estilização da interface -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Phosphor Icons para os ícones modernos -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- ExcelJS para gerar o Excel nativo COM imagens -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+
+    <!-- Configurações do Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Estilos adicionais para scrollbar e ajustes finos */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        
+        /* Área de paste da imagem */
+        #image-paste-area {
+            transition: all 0.2s ease;
+        }
+        #image-paste-area.dragover {
+            background-color: #f0fdf4;
+            border-color: #22c55e;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans p-4 md:p-8 min-h-screen">
+
+    <div class="max-w-6xl mx-auto space-y-6" id="app-container">
+        
+        <!-- Cabeçalho -->
+        <header class="bg-white rounded-xl shadow-sm p-6 flex flex-col md:flex-row items-center justify-between border border-gray-200 no-print">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-brand-100 text-brand-600 rounded-lg">
+                    <i class="ph ph-arrows-left-right text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">Conversor de Tabela MSS</h1>
+                    <p class="text-sm text-gray-500">Transforme dados colados do Excel para o formato de importação</p>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 no-print">
+            
+            <!-- Coluna da Esquerda: Entrada -->
+            <div class="lg:col-span-1 space-y-6">
+
+                <!-- Card de Colagem de Dados -->
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+                    <h2 class="text-lg font-semibold mb-2 flex items-center gap-2">
+                        <i class="ph ph-table"></i> Dados do Excel
+                    </h2>
+                    <p class="text-xs text-gray-500 mb-4">Cole aqui (CTRL+V) a tabela copiada do seu Excel.</p>
+                    <textarea id="input-data" rows="6" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all font-mono text-sm whitespace-pre text-nowrap overflow-x-auto" placeholder="ID&#9;CLIENTE&#9;GRUPO&#9;CNPJ&#9;ITEM..."></textarea>
+                    
+                    <!-- Mapeamento de Colunas (Mostrado após processar os dados) -->
+                    <div id="column-selector-container" class="hidden mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                            <i class="ph ph-sliders"></i> Mapeamento de Colunas
+                        </h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs text-gray-600 mb-1">Coluna do ITEM:</label>
+                                <select id="item-column-select" class="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-brand-500 outline-none text-sm"></select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-600 mb-1">Coluna do PREÇO/VALOR:</label>
+                                <select id="price-column-select" class="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-brand-500 outline-none text-sm"></select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button onclick="processData()" class="mt-4 w-full bg-brand-600 hover:bg-brand-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm">
+                        <i class="ph ph-magic-wand"></i> Processar Dados
+                    </button>
+                </div>
+            </div>
+
+            <!-- Coluna da Direita: Imagem e Resultados -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- Área de Anexo de E-mail (Print) -->
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200" id="pdf-image-section">
+                    <div class="flex items-center justify-between mb-4 no-print">
+                        <h2 class="text-lg font-semibold flex items-center gap-2">
+                            <i class="ph ph-image"></i> Anexo do E-mail (Print)
+                        </h2>
+                        <button onclick="clearImage()" class="text-xs text-red-500 hover:text-red-700 flex items-center gap-1">
+                            <i class="ph ph-trash"></i> Remover Imagem
+                        </button>
+                    </div>
+                    
+                    <div id="image-paste-area" class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center bg-gray-50 flex flex-col items-center justify-center min-h-[200px] cursor-pointer no-print relative overflow-hidden group">
+                        <!-- Input file invisível para fallback -->
+                        <input type="file" id="file-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                        
+                        <div id="paste-instructions" class="pointer-events-none">
+                            <i class="ph ph-clipboard-text text-4xl text-gray-400 mb-3"></i>
+                            <p class="text-gray-600 font-medium">Clique aqui e dê <kbd class="bg-white border border-gray-300 rounded px-1 text-sm shadow-sm">CTRL + V</kbd></p>
+                            <p class="text-sm text-gray-500 mt-1">ou arraste uma imagem / clique para selecionar</p>
+                        </div>
+                    </div>
+                    <!-- Área onde a imagem renderiza para o Excel e Visualização -->
+                    <div id="image-preview-container" class="hidden mt-4 w-full">
+                        <img id="image-preview" src="" alt="Print do e-mail" class="max-w-full h-auto rounded-lg border border-gray-200 shadow-sm mx-auto">
+                    </div>
+                </div>
+
+                <!-- Resultados -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hidden" id="result-section">
+                    
+                    <!-- Toolbar da Tabela -->
+                    <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-4 no-print">
+                        <h2 class="text-lg font-semibold flex items-center gap-2 text-gray-800">
+                            <i class="ph ph-check-circle text-brand-600"></i> Resultado
+                        </h2>
+                        <div class="flex gap-2 w-full sm:w-auto flex-wrap">
+                            <button onclick="copyToClipboard()" class="flex-1 sm:flex-none bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm">
+                                <i class="ph ph-copy"></i> Copiar
+                            </button>
+                            <button onclick="generateExcel()" class="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm">
+                                <i class="ph ph-microsoft-excel-logo"></i> Baixar Excel
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Container para a Tabela Visual -->
+                    <div id="pdf-table-container" class="p-0 md:p-6 overflow-x-auto">
+                        <table class="w-full text-sm text-left text-gray-600" id="output-table">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                                <tr>
+                                    <th class="px-4 py-3 border-b">Seq.</th>
+                                    <th class="px-4 py-3 border-b">Item</th>
+                                    <th class="px-4 py-3 border-b text-right">Mult. <i class="ph ph-pencil-simple text-amber-600" title="Editável"></i></th>
+                                    <th class="px-4 py-3 border-b text-right">Valor Final</th>
+                                    <th class="px-4 py-3 border-b text-center">Código <i class="ph ph-pencil-simple text-blue-600" title="Editável"></i></th>
+                                    <th class="px-4 py-3 border-b text-right font-bold text-gray-900">Total Calc.</th>
+                                </tr>
+                            </thead>
+                            <tbody id="output-tbody" class="divide-y divide-gray-200 bg-white">
+                                <!-- Linhas geradas via JS -->
+                            </tbody>
+                            <tfoot class="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-900">
+                                <tr>
+                                    <td colspan="5" class="px-4 py-3 text-right">SOMA TOTAL:</td>
+                                    <td class="px-4 py-3 text-right" id="output-total">0.00000</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Caixa de Mensagem (Custom Alert) -->
+    <div id="message-box" class="fixed bottom-5 right-5 transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-lg shadow-xl pointer-events-none">
+        <i id="message-icon" class="ph text-xl"></i>
+        <span id="message-text" class="font-medium"></span>
+    </div>
+
+    <script>
+        // --- ESTADO GLOBAL E INICIALIZAÇÃO ---
+        let currentHeaders = [];
+        let parsedRowsData = [];
+        let itemColumnIndex = -1;
+        let priceColumnIndex = -1;
+        let processedTableData = []; // Para copiar pro clipboard
+
+        // Gera a data atual no formato M+DD+YYYY (ex: Set 23 2026 -> 9232026)
+        function generateDateCode() {
+            const d = new Date();
+            const m = d.getMonth() + 1; // 1 a 12
+            const day = String(d.getDate()).padStart(2, '0'); // Garante 2 digitos
+            const y = d.getFullYear();
+            return `${m}${day}${y}`;
+        }
+
+        window.onload = function() {
+            setupImagePaste();
+        };
+
+        // --- SISTEMA DE NOTIFICAÇÃO ---
+        function showMessage(text, type = 'success') {
+            const box = document.getElementById('message-box');
+            const icon = document.getElementById('message-icon');
+            const textEl = document.getElementById('message-text');
+            
+            textEl.innerText = text;
+            box.classList.remove('bg-gray-900', 'bg-red-600', 'bg-amber-600');
+            icon.className = 'ph text-xl'; // reset
+            
+            if(type === 'success') {
+                box.classList.add('bg-gray-900');
+                icon.classList.add('ph-check-circle', 'text-brand-400');
+            } else if (type === 'error') {
+                box.classList.add('bg-red-600');
+                icon.classList.add('ph-x-circle', 'text-white');
+            } else if (type === 'warning') {
+                box.classList.add('bg-amber-600');
+                icon.classList.add('ph-warning', 'text-white');
+            }
+
+            box.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                box.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        // --- MANIPULAÇÃO DE IMAGEM (COLA/DRAG/INPUT) ---
+        function setupImagePaste() {
+            const pasteArea = document.getElementById('image-paste-area');
+            const fileInput = document.getElementById('file-input');
+
+            // Detectar CTRL+V na página toda para facilitar
+            document.addEventListener('paste', handlePasteEvent);
+            
+            // Suporte para Input File nativo
+            fileInput.addEventListener('change', function(e) {
+                if(e.target.files && e.target.files[0]) {
+                    processImageFile(e.target.files[0]);
+                }
+            });
+
+            // Drag and Drop
+            pasteArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                pasteArea.classList.add('dragover');
+            });
+            pasteArea.addEventListener('dragleave', () => pasteArea.classList.remove('dragover'));
+            pasteArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                pasteArea.classList.remove('dragover');
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    processImageFile(e.dataTransfer.files[0]);
+                }
+            });
+        }
+
+        function handlePasteEvent(e) {
+            // Ignora se o usuário está digitando num input/textarea (exceto o próprio textarea de dados)
+            const activeTag = document.activeElement.tagName.toLowerCase();
+            if ((activeTag === 'input' || activeTag === 'textarea') && document.activeElement.id !== 'input-data') {
+                return;
+            }
+
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf("image") !== -1) {
+                    e.preventDefault(); // Impede colar a imagem no textarea caso esteja focado
+                    const file = items[i].getAsFile();
+                    processImageFile(file);
+                    break; // Pega só a primeira imagem
+                }
+            }
+        }
+
+        function processImageFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showMessage('O arquivo selecionado não é uma imagem válida.', 'error');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const imgSrc = event.target.result;
+                document.getElementById('image-preview').src = imgSrc;
+                document.getElementById('image-preview-container').classList.remove('hidden');
+                document.getElementById('image-paste-area').classList.add('hidden');
+                showMessage('Imagem anexada com sucesso!');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearImage() {
+            document.getElementById('image-preview').src = '';
+            document.getElementById('image-preview-container').classList.add('hidden');
+            document.getElementById('image-paste-area').classList.remove('hidden');
+            document.getElementById('file-input').value = '';
+        }
+
+        // --- STREAMING_CHUNK: Lógica Central de Limpeza e Processamento Matemático ---
+
+        // Função robusta para extrair número de strings bagunçadas de finanças ("R$ 1.234,56")
+        function cleanCurrencyToNumber(val) {
+            if (!val || typeof val !== 'string') return 0;
+            
+            // Remove R$, $, espaços
+            let cleanStr = val.replace(/R\$\s?/gi, '').replace(/\$\s?/gi, '').trim();
+            
+            // Lógica para separadores brasileiros vs americanos
+            // Se tem virgula e ponto (ex: 1.234,56 ou 1,234.56)
+            if (cleanStr.includes(',') && cleanStr.includes('.')) {
+                let lastComma = cleanStr.lastIndexOf(',');
+                let lastDot = cleanStr.lastIndexOf('.');
+                
+                if (lastComma > lastDot) {
+                    // Formato brasileiro: 1.234,56 -> tira pontos, virgula vira ponto
+                    cleanStr = cleanStr.replace(/\./g, '').replace(',', '.');
+                } else {
+                    // Formato americano: 1,234.56 -> tira virgulas
+                    cleanStr = cleanStr.replace(/,/g, '');
+                }
+            } else if (cleanStr.includes(',')) {
+                // Só tem virgula (ex: 1234,56). Assume decimal.
+                cleanStr = cleanStr.replace(',', '.');
+            }
+            
+            // Agora garantimos que so tem dígitos e no maximo 1 ponto
+            cleanStr = cleanStr.replace(/[^\d.-]/g, '');
+            let finalNumber = parseFloat(cleanStr);
+            
+            return isNaN(finalNumber) ? 0 : finalNumber;
+        }
+
+        // Inicia o processamento quando clica no botão principal
+        function processData() {
+            const rawData = document.getElementById('input-data').value.trim();
+            if (!rawData) {
+                showMessage("Cole os dados no campo de texto antes de processar.", "warning");
+                return;
+            }
+
+            // Divide por quebra de linha (suporta \r\n ou \n)
+            const rows = rawData.split(/\r?\n/);
+            if (rows.length < 2) {
+                showMessage("É necessário pelo menos cabeçalho e 1 linha de dados.", "warning");
+                return;
+            }
+
+            // O primeiro elemento é o header. Split por Tab.
+            currentHeaders = rows[0].split('\t').map(h => h.trim());
+            
+            // Filtra linhas vazias
+            parsedRowsData = rows.slice(1).map(r => r.split('\t')).filter(r => r.join('').trim() !== '');
+
+            // Tentativa de auto-detecção de colunas
+            itemColumnIndex = currentHeaders.findIndex(h => h.toUpperCase().includes('ITEM'));
+            
+            priceColumnIndex = currentHeaders.findIndex(h => 
+                h.toUpperCase().includes('PREÇO') || 
+                h.toUpperCase().includes('PRECO') || 
+                h.toUpperCase().includes('VALOR')
+            );
+
+            // Se não achou o preço por nome, pega a última coluna (fallback)
+            if (priceColumnIndex === -1) {
+                priceColumnIndex = currentHeaders.length - 1;
+            }
+
+            // Preenche os selects de mapeamento
+            const itemSelect = document.getElementById('item-column-select');
+            const priceSelect = document.getElementById('price-column-select');
+            
+            itemSelect.innerHTML = '';
+            priceSelect.innerHTML = '';
+
+            currentHeaders.forEach((header, index) => {
+                const optItem = document.createElement('option');
+                optItem.value = index;
+                optItem.text = header || `Coluna ${index + 1}`;
+                itemSelect.appendChild(optItem);
+
+                const optPrice = document.createElement('option');
+                optPrice.value = index;
+                optPrice.text = header || `Coluna ${index + 1}`;
+                priceSelect.appendChild(optPrice);
+            });
+
+            // Define os valores nos selects (se auto-detectou algo válido, senao deixa o default 0)
+            itemSelect.value = itemColumnIndex !== -1 ? itemColumnIndex : 0;
+            priceSelect.value = priceColumnIndex !== -1 ? priceColumnIndex : currentHeaders.length - 1;
+
+            // Atualiza as variaveis com o que esta no select
+            itemColumnIndex = parseInt(itemSelect.value);
+            priceColumnIndex = parseInt(priceSelect.value);
+
+            // Mostra o container de mapeamento
+            document.getElementById('column-selector-container').classList.remove('hidden');
+
+            // Adiciona eventos pra reprocessar automaticamente se ele mudar o dropdown
+            itemSelect.onchange = function() {
+                itemColumnIndex = parseInt(this.value);
+                generateOutput();
+            };
+            priceSelect.onchange = function() {
+                priceColumnIndex = parseInt(this.value);
+                generateOutput();
+            };
+
+            generateOutput();
+        }
+
+        // --- STREAMING_CHUNK: Geração da Tabela HTML de Saída ---
+        
+        function generateOutput() {
+            if (itemColumnIndex === -1 || !parsedRowsData.length) return;
+
+            const defaultMultiplier = 0.001;
+            const defaultDateCode = generateDateCode();
+            
+            const tbody = document.getElementById('output-tbody');
+            tbody.innerHTML = ''; // Limpa tabela
+            
+            processedTableData = []; // Reseta dados do clipboard
+            let totalSum = 0;
+
+            parsedRowsData.forEach((row, index) => {
+                const seq = index + 1;
+                // Previne erro se a linha for menor que o indice selecionado
+                const itemCode = row[itemColumnIndex] ? row[itemColumnIndex].trim() : ''; 
+                
+                // Pega o valor da coluna selecionada de PREÇO
+                const rawPriceVal = row[priceColumnIndex] ? row[priceColumnIndex] : '0';
+                const finalPrice = cleanCurrencyToNumber(rawPriceVal);
+                
+                // Calcula: Multiplicador * Preco (coluna C x D do exemplo)
+                const calculatedValue = finalPrice * defaultMultiplier;
+                totalSum += calculatedValue;
+
+                // Salva pra geração do clipboard / excel
+                // Formato exigido (sem colunas extras): Seq, Item, Mult, Preco, Codigo, Calculado
+                const finalPriceFormatted = finalPrice.toFixed(2);
+                const calcValueFormatted = calculatedValue.toFixed(5);
+                
+                processedTableData.push([
+                    seq, 
+                    itemCode, 
+                    defaultMultiplier, 
+                    finalPriceFormatted, 
+                    defaultDateCode, 
+                    calcValueFormatted
+                ]);
+
+                // Renderiza HTML
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 transition-colors";
+                tr.innerHTML = `
+                    <td class="px-4 py-2 border-b whitespace-nowrap">${seq}</td>
+                    <td class="px-4 py-2 border-b whitespace-nowrap font-medium text-gray-900">${itemCode}</td>
+                    <td class="px-4 py-2 border-b whitespace-nowrap text-right">
+                        <div contenteditable="true" oninput="updateRow(${index}, 'mult', this)" class="inline-block px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded text-amber-900 cursor-text min-w-[60px] outline-none focus:ring-2 focus:ring-brand-500 transition-colors font-mono" title="Clique para editar">${defaultMultiplier}</div>
+                    </td>
+                    <td class="px-4 py-2 border-b whitespace-nowrap text-right text-gray-700">${finalPriceFormatted}</td>
+                    <td class="px-4 py-2 border-b whitespace-nowrap text-center">
+                        <div contenteditable="true" oninput="updateRow(${index}, 'date', this)" class="inline-block px-2 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded text-blue-900 cursor-text min-w-[80px] outline-none focus:ring-2 focus:ring-brand-500 transition-colors font-mono" title="Clique para editar">${defaultDateCode}</div>
+                    </td>
+                    <td class="px-4 py-2 border-b whitespace-nowrap text-right font-semibold text-brand-700 calc-value">${calcValueFormatted}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Atualiza Rodapé (Soma)
+            document.getElementById('output-total').innerText = totalSum.toFixed(5);
+            
+            // Exibe a seção
+            document.getElementById('result-section').classList.remove('hidden');
+            
+            showMessage("Tabela processada com sucesso!", "success");
+            showMessage("Você pode editar o Multiplicador e a Data clicando neles na tabela.", "warning");
+        }
+
+        // Função para atualizar os dados quando o usuário edita as células na tabela
+        function updateRow(index, type, el) {
+            if (!processedTableData[index]) return;
+            
+            if (type === 'mult') {
+                // Pega o valor digitado (aceita virgula ou ponto)
+                let newMult = parseFloat(el.innerText.replace(',', '.'));
+                if (isNaN(newMult)) newMult = 0;
+                
+                let rowData = processedTableData[index];
+                let finalPrice = parseFloat(rowData[3]); // O preço na coluna 3
+                let calculatedValue = newMult * finalPrice;
+                
+                // Atualiza o array de exportação
+                rowData[2] = newMult; 
+                rowData[5] = calculatedValue.toFixed(5);
+                
+                // Atualiza a interface da célula de Total Calculado para esta linha
+                el.closest('tr').querySelector('.calc-value').innerText = rowData[5];
+                
+                // Recalcula o somatório total do rodapé
+                recalculateTotal();
+            } else if (type === 'date') {
+                // Apenas atualiza a string no array para cópia/PDF
+                processedTableData[index][4] = el.innerText.trim();
+            }
+        }
+
+        // Recalcula a soma total da última coluna
+        function recalculateTotal() {
+            let totalSum = 0;
+            processedTableData.forEach(row => {
+                totalSum += parseFloat(row[5]) || 0;
+            });
+            document.getElementById('output-total').innerText = totalSum.toFixed(5);
+        }
+
+        // --- STREAMING_CHUNK: Exportações (Clipboard e PDF) ---
+
+        // Copiar Formato Excel
+        function copyToClipboard() {
+            if (processedTableData.length === 0) {
+                showMessage("Não há dados para copiar.", "warning");
+                return;
+            }
+
+            let textToCopy = "";
+            const totalSum = document.getElementById('output-total').innerText;
+
+            // Monta as linhas (separadas por Tab para cair certo nas celulas do Excel)
+            processedTableData.forEach(row => {
+                // Transforma ponto em virgula na hora de jogar pro excel se necessário? 
+                // O usuário pediu ponto no requisito: "Sempre Ponto".
+                textToCopy += row.join('\t') + '\n';
+            });
+
+            // Adiciona Rodapé igual o exemplo: espaços tabulados até a ultima coluna e o total
+            textToCopy += `\t\t\t\t\t${totalSum}`;
+
+            // Usa a API Clipboard nativa (Moderno)
+            try {
+                // Como pode rodar em iframe, document.execCommand atua como fallback robusto
+                const textArea = document.createElement("textarea");
+                textArea.value = textToCopy;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textArea);
+                showMessage("Copiado! Agora dê CTRL+V no Excel.");
+            } catch (err) {
+                console.error('Falha ao copiar:', err);
+                showMessage("Erro ao copiar. Tente selecionar a tabela manualmente.", "error");
+            }
+        }
+
+        // --- STREAMING_CHUNK: Geração de Arquivo Excel (.xlsx) ---
+        async function generateExcel() {
+            if (processedTableData.length === 0) {
+                showMessage("Processe os dados da tabela primeiro.", "warning");
+                return;
+            }
+
+            showMessage("Gerando arquivo Excel, aguarde...", "success");
+
+            // 1. Descobrir ID do Cliente para o nome do arquivo e aba
+            let clientId = "";
+            let sheetName = "Exportacao";
+            const idColIndex = currentHeaders.findIndex(h => h.toUpperCase().trim() === 'ID');
+            
+            if (idColIndex !== -1 && parsedRowsData.length > 0) {
+                clientId = parsedRowsData[0][idColIndex];
+                if (clientId) {
+                    clientId = String(clientId).trim();
+                    // Limpa caracteres inválidos que o Excel não aceita em nomes de aba
+                    sheetName = clientId.replace(/[\\\/\?\*\[\]:]/g, '').substring(0, 31);
+                }
+            }
+
+            // Cria o nome do arquivo no formato [ID]_[Ano-Mes-Dia].xlsx
+            const d = new Date();
+            const fileDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            const filename = clientId ? `${clientId}_${fileDate}.xlsx` : `MSS_Export_${fileDate}.xlsx`;
+
+            try {
+                // Instancia o Workbook usando ExcelJS
+                const workbook = new ExcelJS.Workbook();
+                const worksheet = workbook.addWorksheet(sheetName || 'Exportacao');
+
+                // 2. Monta e Estiliza o Cabeçalho
+                const headerRow = worksheet.addRow(["Seq.", "Item", "Mult.", "Valor Final", "Código", "Total Calc."]);
+                headerRow.font = { bold: true, color: { argb: 'FF374151' } };
+                headerRow.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFE5E7EB' }
+                };
+
+                // 3. Insere os Dados processados (como números reais, não apenas textos)
+                processedTableData.forEach(row => {
+                    worksheet.addRow([
+                        parseInt(row[0]),
+                        row[1], 
+                        parseFloat(row[2]), 
+                        parseFloat(row[3]), 
+                        row[4], 
+                        parseFloat(row[5]) 
+                    ]);
+                });
+
+                // 4. Monta o Rodapé (Soma Total)
+                const totalSum = parseFloat(document.getElementById('output-total').innerText);
+                const footerRow = worksheet.addRow(["", "", "", "", "SOMA TOTAL:", totalSum]);
+                footerRow.font = { bold: true };
+
+                // Ajusta as larguras das colunas para ficar visualmente bonito no Excel
+                worksheet.columns = [
+                    { width: 8 },  // Seq
+                    { width: 22 }, // Item
+                    { width: 10 }, // Mult
+                    { width: 15 }, // Valor Final
+                    { width: 15 }, // Codigo
+                    { width: 18 }  // Total Calc
+                ];
+
+                // 5. Inserir a Imagem do Print (se houver)
+                const imgEl = document.getElementById('image-preview');
+                if (imgEl && imgEl.src && imgEl.src.startsWith('data:image')) {
+                    const imgSrc = imgEl.src;
+                    
+                    // Extrai os dados puros (base64) e o formato da imagem
+                    const mimeType = imgSrc.substring(imgSrc.indexOf(':') + 1, imgSrc.indexOf(';'));
+                    const base64Data = imgSrc.substring(imgSrc.indexOf(',') + 1);
+                    
+                    let ext = 'png';
+                    if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = 'jpeg';
+                    else if (mimeType.includes('gif')) ext = 'gif';
+
+                    // Registra a imagem no arquivo Excel
+                    const imageId = workbook.addImage({
+                        base64: base64Data,
+                        extension: ext,
+                    });
+
+                    // Pega dimensões da imagem, mas limita a 900px de largura para não explodir a tela do Excel
+                    let w = imgEl.naturalWidth || 800;
+                    let h = imgEl.naturalHeight || 600;
+                    if (w > 900) {
+                        const ratio = 900 / w;
+                        w = 900;
+                        h = h * ratio;
+                    }
+
+                    // Posiciona a imagem 3 linhas abaixo da tabela
+                    const imgStartRow = processedTableData.length + 3; 
+
+                    worksheet.addImage(imageId, {
+                        tl: { col: 0, row: imgStartRow },
+                        ext: { width: w, height: h }
+                    });
+                }
+
+                // 6. Formatações Numéricas Nativas do Excel
+                worksheet.getColumn(3).numFmt = '0.000';      // Mult
+                worksheet.getColumn(4).numFmt = '#,##0.00';   // Valor Final
+                worksheet.getColumn(6).numFmt = '0.00000';    // Total
+
+                // 7. Gera e Baixa o arquivo para o navegador
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = filename;
+                link.click();
+                URL.revokeObjectURL(link.href);
+                
+                showMessage(`Arquivo ${filename} baixado com sucesso!`, "success");
+
+            } catch (err) {
+                console.error("Erro ao gerar Excel:", err);
+                showMessage("Erro ao processar arquivo, tente novamente.", "error");
+            }
+        }
+
+    </script>
+</body>
+</html>
