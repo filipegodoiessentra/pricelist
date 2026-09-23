@@ -167,7 +167,7 @@
                                     <th data-column-index="1" class="px-4 py-3 border-b" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Item</th>
                                     <th data-column-index="2" class="px-4 py-3 border-b text-right" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Mult. <i class="ph ph-pencil-simple text-amber-600" title="Editável"></i></th>
                                     <th data-column-index="3" class="px-4 py-3 border-b text-right" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Valor Final</th>
-                                    <th data-column-index="4" class="px-4 py-3 border-b text-center" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Código <i class="ph ph-pencil-simple text-blue-600" title="Editável"></i></th>
+                                    <th data-column-index="4" class="px-4 py-3 border-b text-center" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Data <i class="ph ph-pencil-simple text-blue-600" title="Editável"></i></th>
                                     <th data-column-index="5" class="px-4 py-3 border-b text-right font-bold text-gray-900" title="Clique para selecionar a coluna. Use Ctrl ou Cmd para adicionar colunas.">Total Calc.</th>
                                 </tr>
                             </thead>
@@ -494,7 +494,7 @@
                 totalSum += calculatedValue;
 
                 // Salva pra geração do clipboard / excel
-                // Formato exigido (sem colunas extras): Seq, Item, Mult, Preco, Codigo, Calculado
+                // Formato exigido (sem colunas extras): Seq, Item, Mult, Preco, Data, Calculado
                 const finalPriceFormatted = finalPrice.toFixed(2);
                 const calcValueFormatted = calculatedValue.toFixed(5);
                 
@@ -649,7 +649,7 @@
                 const worksheet = workbook.addWorksheet(sheetName || 'Exportacao');
 
                 // 2. Monta e Estiliza o Cabeçalho
-                const headerRow = worksheet.addRow(["Seq.", "Item", "Mult.", "Valor Final", "Código", "Total Calc."]);
+                const headerRow = worksheet.addRow(["Seq.", "Item", "Mult.", "Valor Final", "Data", "Total Calc."]);
                 headerRow.font = { bold: true, color: { argb: 'FF374151' } };
                 headerRow.fill = {
                     type: 'pattern',
@@ -680,7 +680,7 @@
                     { width: 22 }, // Item
                     { width: 10 }, // Mult
                     { width: 15 }, // Valor Final
-                    { width: 15 }, // Codigo
+                    { width: 15 }, // Data
                     { width: 18 }  // Total Calc
                 ];
 
